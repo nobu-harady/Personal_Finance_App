@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家計簿 - 一覧・分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 700px; margin: auto; font-size: 18px; }
+        form { display: flex; flex-direction: column; gap: 15px; }
+        div { display: flex; flex-direction: column; }
+        label { margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { padding: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 1.1em; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
+        button:hover { background-color: #0056b3; }
+        nav { margin-bottom: 20px; text-align: center; }
+        nav a { margin: 0 15px; text-decoration: none; color: #007bff; font-weight: bold; }
+        .chart-wrapper { width: 100%; max-width: 100%; text-align: center; }
+        .radio-group { flex-direction: row; align-items: center; }
+        .radio-group label { font-weight: normal; margin-right: 15px; margin-bottom: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .actions button { font-size: 14px; padding: 5px 10px; margin-right: 5px; }
+        .edit-btn { background-color: #ffc107; color: black; }
+        .edit-btn:hover { background-color: #e0a800; }
+        .delete-btn { background-color: #dc3545; }
+        .delete-btn:hover { background-color: #c82333; }
+        .amount-expense { color: #dc3545; font-weight: bold; }
+        .amount-income { color: #28a745; font-weight: bold; }
+        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
+        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>家計簿アプリ</h1>
+
+    <nav>
+        <a href="/">収支バランス</a>
+        <a href="/list">一覧・分析</a>
+    </nav>
+
+    <hr>
+
+    <h2>月別支出比較 (過去12ヶ月)</h2>
+    <div class="chart-wrapper" style="max-width: 100%; margin: 20px auto;">
+        <canvas id="monthly-expense-bar-chart"></canvas>
+    </div>
+
+    <hr>
+
+    <h2 id="history-section">取引履歴</h2>
+    <table id="transaction-list">
+        <thead>
+            <tr>
+                <th>日付</th>
+                <th>種類</th>
+                <th>カテゴリ</th>
+                <th>金額</th>
+                <th>メモ</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .transactions}}
+            <tr>
+                <td>{{.Date.Format "2006-01-02"}}</td>
+                <td>{{if eq .Type "income"}}<span class="amount-income">収入</span>{{else}}<span class="amount-expense">支出</span>{{end}}</td>
+                <td>{{.Category}}</td>
+                <td class="{{if eq .Type "income"}}amount-income{{else}}amount-expense{{end}}">{{.Amount}}円</td>
+                <td>{{.Memo}}</td>
+                <td class="actions">
+                    <button class="edit-btn" data-id="{{.ID}}">編集</button>
+                    <button class="delete-btn" data-id="{{.ID}}">削除</button>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-modal-btn" class="close-btn">&times;</span>
+            <h2>取引を編集</h2>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id" name="id">
+                <div>
+                    <label for="edit-date">日付:</label>
+                    <input type="date" id="edit-date" name="date" required>
+                </div>
+        
+                <div class="radio-group">
+                    <label>種類:</label>
+                    <input type="radio" id="edit-type-expense" name="type" value="expense">
+                    <label for="edit-type-expense">支出</label>
+                    <input type="radio" id="edit-type-income" name="type" value="income">
+                    <label for="edit-type-income">収入</label>
+                </div>
+        
+                <div>
+                    <label for="edit-category">カテゴリ:</label>
+                    <select id="edit-category" name="category" required></select>
+                </div>
+        
+                <div>
+                    <label for="edit-amount">金額:</label>
+                    <input type="number" id="edit-amount" name="amount" required min="1">
+                </div>
+        
+                <div>
+                    <label for="edit-memo">メモ:</label>
+                    <textarea id="edit-memo" name="memo" rows="3"></textarea>
+                </div>
+                <button type="submit">更新</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const expenseCategories = [
+            "家賃", "医療ローン", "保険", "サブスク", "ショッピング分割", "光熱費",
+            "食費", "日用品", "交通費", "スキルアップ", "仕事用品", "医療", "美容", "娯楽", "その他（支出）"
+        ];
+        const incomeCategories = ["給与", "賞与", "販売", "その他（収入）"];
+
+        const editModal = document.getElementById('edit-modal');
+        const editForm = document.getElementById('edit-form');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+        function updateEditCategories() {
+            const selectedTypeRadio = document.querySelector('#edit-form input[name="type"]:checked');
+            if (!selectedTypeRadio) return;
+            const selectedType = selectedTypeRadio.value;
+            const categories = selectedType === 'income' ? incomeCategories : expenseCategories;
+            const editCategorySelect = document.getElementById('edit-category');
+            
+            editCategorySelect.innerHTML = '';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                editCategorySelect.appendChild(option);
+            });
+        }
+
+        document.querySelectorAll('#edit-form input[name="type"]').forEach(radio => radio.addEventListener('change', updateEditCategories));
+
+        document.getElementById('transaction-list')?.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('delete-btn')) {
+                const id = e.target.dataset.id;
+                if (confirm(`ID: ${id} の取引を本当に削除しますか？`)) {
+                    try {
+                        const response = await fetch(`/transactions/${id}`, { method: 'DELETE' });
+                        if (!response.ok) throw new Error('削除に失敗しました。');
+                        window.location.reload();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                }
+            } else if (e.target.classList.contains('edit-btn')) {
+                openEditModal(e.target.dataset.id);
+            }
+        });
+
+        async function openEditModal(id) {
+            try {
+                const response = await fetch(`/transactions/${id}`);
+                if (!response.ok) throw new Error('取引データの取得に失敗しました。');
+                const { data } = await response.json();
+
+                document.getElementById('edit-id').value = data.ID;
+                document.getElementById('edit-date').value = data.date.substring(0, 10);
+                document.getElementById(`edit-type-${data.type}`).checked = true;
+                
+                updateEditCategories();
+                document.getElementById('edit-category').value = data.category;
+                document.getElementById('edit-amount').value = data.amount;
+                document.getElementById('edit-memo').value = data.memo;
+
+                editModal.style.display = 'block';
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        function closeEditModal() {
+            editModal.style.display = 'none';
+        }
+
+        closeModalBtn.addEventListener('click', closeEditModal);
+        window.addEventListener('click', (e) => {
+            if (e.target == editModal) closeEditModal();
+        });
+
+        editForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const dateValue = document.getElementById('edit-date').value;
+            const date = new Date(dateValue + 'T00:00:00Z');
+
+            const data = {
+                date: date.toISOString(),
+                type: document.querySelector('#edit-form input[name="type"]:checked').value,
+                category: document.getElementById('edit-category').value,
+                amount: parseInt(document.getElementById('edit-amount').value, 10),
+                memo: document.getElementById('edit-memo').value
+            };
+
+            try {
+                const response = await fetch(`/transactions/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) {
+                    const result = await response.json();
+                    throw new Error(result.error || '更新に失敗しました。');
+                }
+                window.location.reload();
+            } catch (error) {
+                alert(`エラー: ${error.message}`);
+            }
+        });
+
+        // 棒グラフの描画
+        const barChartCanvas = document.getElementById('monthly-expense-bar-chart');
+        let barChartData;
+        let parseError = false;
+        try {
+            const rawData = '{{.barChartDataJSON | js}}';
+            console.log("Raw Bar Chart JSON from Server:", rawData); // デバッグ用にコンソールに出力
+            barChartData = JSON.parse(rawData);
+
+            if (barChartData && barChartData.datasets && barChartData.datasets.length > 0) {
+                const barCtx = barChartCanvas.getContext('2d');
+                new Chart(barCtx, {
+                    type: 'bar',
+                    data: barChartData,
+                    options: {
+                        plugins: {
+                            title: { display: true, text: 'カテゴリ別 月次支出' },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) { label += ': '; }
+                                        if (context.parsed.y !== null) {
+                                            label += context.parsed.y.toLocaleString() + '円';
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        responsive: true,
+                        scales: {
+                            x: { stacked: true },
+                            y: {
+                                stacked: true,
+                                ticks: { callback: function(value) { return value.toLocaleString() + '円'; } }
+                            }
+                        }
+                    }
+                });
+            } else {
+                throw new Error("No data");
+            }
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                console.error("Failed to parse bar chart JSON:", e);
+                parseError = true;
+            }
+            barChartCanvas.style.display = 'none';
+            const wrapper = barChartCanvas.parentElement;
+            const noDataMsg = document.createElement('p');
+            noDataMsg.textContent = parseError ? 'グラフデータの解析に失敗しました。' : '棒グラフの集計対象となる支出データが過去12ヶ月間にありません。';
+            wrapper.appendChild(noDataMsg);
+        }
+    </script>
+</body>
+</html>
