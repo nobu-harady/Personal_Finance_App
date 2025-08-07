@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -62,7 +63,8 @@ func main() {
 			Total    int
 		}
 		var monthlyExpenses []MonthlyExpense
-		twelveMonthsAgo := time.Now().AddDate(0, -11, 0)
+		now := time.Now().UTC() // タイムゾーン問題を避けるため、現在時刻をUTCで統一
+		twelveMonthsAgo := now.AddDate(0, -11, 0)
 		firstDayOfPeriod := time.Date(twelveMonthsAgo.Year(), twelveMonthsAgo.Month(), 1, 0, 0, 0, 0, time.UTC)
 
 		database.DB.Model(&models.Transaction{}).
@@ -76,7 +78,7 @@ func main() {
 		monthLabels := make([]string, 12)
 		monthMap := make(map[string]int) // "YYYY-MM" -> index
 		for i := 0; i < 12; i++ {
-			month := time.Now().AddDate(0, -(11 - i), 0)
+			month := now.AddDate(0, -(11 - i), 0)
 			label := month.Format("2006-01")
 			monthLabels[i] = label
 			monthMap[label] = i
@@ -110,11 +112,10 @@ func main() {
 			// エラーが発生した場合は、空のJSONを渡す
 			barChartDataBytes = []byte("{}")
 		}
-		barChartDataJSON := string(barChartDataBytes)
 
 		c.HTML(http.StatusOK, "list.html", gin.H{
 			"transactions":     transactions,
-			"barChartDataJSON": barChartDataJSON,
+			"barChartDataJSON": template.JS(barChartDataBytes),
 		})
 	})
 

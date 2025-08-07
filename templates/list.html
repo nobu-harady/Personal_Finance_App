@@ -231,9 +231,9 @@
         let barChartData;
         let parseError = false;
         try {
-            const rawData = '{{.barChartDataJSON | js}}';
-            console.log("Raw Bar Chart JSON from Server:", rawData); // デバッグ用にコンソールに出力
-            barChartData = JSON.parse(rawData);
+            // サーバーから直接JavaScriptオブジェクトとしてデータを受け取る
+            barChartData = {{.barChartDataJSON}};
+            console.log("Bar Chart Data from Server:", barChartData); // デバッグ用にコンソールに出力
 
             if (barChartData && barChartData.datasets && barChartData.datasets.length > 0) {
                 const barCtx = barChartCanvas.getContext('2d');
@@ -271,13 +271,14 @@
             }
         } catch (e) {
             if (e instanceof SyntaxError) {
-                console.error("Failed to parse bar chart JSON:", e);
+                // このエラーは通常発生しなくなりますが、念のため残します
+                console.error("Failed to evaluate bar chart data:", e);
                 parseError = true;
             }
             barChartCanvas.style.display = 'none';
             const wrapper = barChartCanvas.parentElement;
             const noDataMsg = document.createElement('p');
-            noDataMsg.textContent = parseError ? 'グラフデータの解析に失敗しました。' : '棒グラフの集計対象となる支出データが過去12ヶ月間にありません。';
+            noDataMsg.textContent = parseError ? 'グラフデータの描画に失敗しました。' : '棒グラフの集計対象となる支出データが過去12ヶ月間にありません。';
             wrapper.appendChild(noDataMsg);
         }
     </script>
