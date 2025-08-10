@@ -235,40 +235,37 @@
             barChartData = {{.barChartDataJSON}};
             console.log("Bar Chart Data from Server:", barChartData); // デバッグ用にコンソールに出力
 
-            if (barChartData && barChartData.datasets && barChartData.datasets.length > 0) {
-                const barCtx = barChartCanvas.getContext('2d');
-                new Chart(barCtx, {
-                    type: 'bar',
-                    data: barChartData,
-                    options: {
-                        plugins: {
-                            title: { display: true, text: 'カテゴリ別 月次支出' },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        let label = context.dataset.label || '';
-                                        if (label) { label += ': '; }
-                                        if (context.parsed.y !== null) {
-                                            label += context.parsed.y.toLocaleString() + '円';
-                                        }
-                                        return label;
+            // データがなくてもチャートの枠組みは描画する
+            const barCtx = barChartCanvas.getContext('2d');
+            new Chart(barCtx, {
+                type: 'bar',
+                data: barChartData,
+                options: {
+                    plugins: {
+                        title: { display: true, text: 'カテゴリ別 月次支出' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toLocaleString() + '円';
                                     }
+                                    return label;
                                 }
                             }
-                        },
-                        responsive: true,
-                        scales: {
-                            x: { stacked: true },
-                            y: {
-                                stacked: true,
-                                ticks: { callback: function(value) { return value.toLocaleString() + '円'; } }
-                            }
+                        }
+                    },
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: {
+                            stacked: true,
+                            ticks: { callback: function(value) { return value.toLocaleString() + '円'; } }
                         }
                     }
-                });
-            } else {
-                throw new Error("No data");
-            }
+                }
+            });
         } catch (e) {
             if (e instanceof SyntaxError) {
                 // このエラーは通常発生しなくなりますが、念のため残します
@@ -278,7 +275,7 @@
             barChartCanvas.style.display = 'none';
             const wrapper = barChartCanvas.parentElement;
             const noDataMsg = document.createElement('p');
-            noDataMsg.textContent = parseError ? 'グラフデータの描画に失敗しました。' : '棒グラフの集計対象となる支出データが過去12ヶ月間にありません。';
+            noDataMsg.textContent = 'グラフデータの描画に失敗しました。';
             wrapper.appendChild(noDataMsg);
         }
     </script>

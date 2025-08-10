@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家計簿 - 新規登録</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: auto; font-size: 16px; }
+        form { display: flex; flex-direction: column; gap: 15px; }
+        nav { margin-bottom: 20px; text-align: center; }
+        nav a { margin: 0 15px; text-decoration: none; color: #007bff; font-weight: bold; font-size: 1.2em; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
+        button:hover { background-color: #0056b3; }
+        #message { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .transaction-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; padding: 10px; border: 1px solid #eee; border-radius: 4px; }
+        .transaction-row input, .transaction-row select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+        .input-date { flex: 2; }
+        .input-type { flex: 2; }
+        .input-category { flex: 3; }
+        .input-amount { flex: 2; }
+        .input-memo { flex: 4; }
+        .remove-btn { background-color: #6c757d; padding: 8px 12px; }
+        .remove-btn:hover { background-color: #5a6268; }
+        #add-row-btn { background-color: #28a745; margin-bottom: 15px; }
+        #add-row-btn:hover { background-color: #218838; }
+    </style>
+</head>
+<body>
+    <h1>家計簿アプリ</h1>
+
+    <nav>
+        <a href="/">収支バランス</a>
+        <a href="/list">一覧・分析</a>
+        <a href="/register">新規登録</a>
+    </nav>
+
+    <hr>
+
+    <h2>取引をまとめて登録</h2>
+    <form id="bulk-transaction-form">
+        <div id="transaction-rows-container">
+            <!-- Transaction rows will be added here by JavaScript -->
+        </div>
+        <button type="button" id="add-row-btn">＋ 行を追加</button>
+        <hr>
+        <button type="submit">まとめて登録</button>
+    </form>
+
+    <div id="message"></div>
+
+    <script>
+        const expenseCategories = ["家賃", "医療ローン", "保険", "サブスク", "ショッピング分割", "光熱費", "食費", "日用品", "交通費", "スキルアップ", "仕事用品", "医療", "美容", "娯楽", "その他（支出）"];
+        const incomeCategories = ["給与", "賞与", "販売", "その他（収入）"];
+        const rowsContainer = document.getElementById('transaction-rows-container');
+        const form = document.getElementById('bulk-transaction-form');
+        const messageDiv = document.getElementById('message');
+
+        function createRow() {
+            const row = document.createElement('div');
+            row.className = 'transaction-row';
+
+            const today = new Date().toISOString().substring(0, 10);
+
+            row.innerHTML = `
+                <input type="date" class="input-date" value="${today}" required>
+                <div class="input-type">
+                    <input type="radio" name="type-${rowsContainer.children.length}" value="expense" checked> 支出
+                    <input type="radio" name="type-${rowsContainer.children.length}" value="income"> 収入
+                </div>
+                <select class="input-category" required></select>
+                <input type="number" class="input-amount" placeholder="金額" required min="1">
+                <input type="text" class="input-memo" placeholder="メモ">
+                <button type="button" class="remove-btn">削除</button>
+            `;
+
+            const categorySelect = row.querySelector('.input-category');
+            const typeRadios = row.querySelectorAll('input[type="radio"]');
+
+            function updateCategories() {
+                const selectedType = row.querySelector('input[type="radio"]:checked').value;
+                const categories = selectedType === 'income' ? incomeCategories : expenseCategories;
+                categorySelect.innerHTML = '';
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    categorySelect.appendChild(option);
+                });
+            }
+
+            typeRadios.forEach(radio => radio.addEventListener('change', updateCategories));
+            row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
+
+            rowsContainer.appendChild(row);
+            updateCategories(); // Initialize categories for the new row
+        }
+
+        document.getElementById('add-row-btn').addEventListener('click', createRow);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            messageDiv.style.display = 'none';
+
+            const transactions = [];
+            const rows = rowsContainer.querySelectorAll('.transaction-row');
+
+            for (const row of rows) {
+                const dateValue = row.querySelector('.input-date').value;
+                const amount = row.querySelector('.input-amount').value;
+
+                if (!dateValue || !amount) {
+                    alert('日付と金額は必須です。');
+                    return;
+                }
+
+                transactions.push({
+                    date: new Date(dateValue + 'T00:00:00Z').toISOString(),
+                    type: row.querySelector('input[type="radio"]:checked').value,
+                    category: row.querySelector('.input-category').value,
+                    amount: parseInt(amount, 10),
+                    memo: row.querySelector('.input-memo').value
+                });
+            }
+
+            if (transactions.length === 0) {
+                alert('登録するデータがありません。');
+                return;
+            }
+
+            try {
+                const response = await fetch('/transactions/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(transactions)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || '登録に失敗しました。');
+
+                messageDiv.textContent = `${transactions.length}件の取引を登録しました！`;
+                messageDiv.className = 'success';
+                rowsContainer.innerHTML = ''; // Clear all rows
+                createRow(); // Add one fresh row
+            } catch (error) {
+                messageDiv.textContent = `エラー: ${error.message}`;
+                messageDiv.className = 'error';
+            } finally {
+                messageDiv.style.display = 'block';
+            }
+        });
+
+        // Add one initial row on page load
+        createRow();
+    </script>
+</body>
+</html>

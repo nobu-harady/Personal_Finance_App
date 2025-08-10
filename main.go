@@ -23,7 +23,8 @@ func main() {
 	database.ConnectDatabase()
 
 	// Webページ表示用のルート
-	r.GET("/", func(c *gin.Context) { // トップページ：円グラフと登録フォーム
+	// トップページ: 円グラフ
+	r.GET("/", func(c *gin.Context) {
 		// 直近1ヶ月間のカテゴリ別支出を計算
 		type CategorySummary struct {
 			Category string
@@ -51,9 +52,9 @@ func main() {
 		})
 	})
 
-	r.GET("/list", func(c *gin.Context) { // 一覧ページ：棒グラフと取引履歴
+	// 一覧・分析ページ: 棒グラフと取引履歴
+	r.GET("/list", func(c *gin.Context) {
 		var transactions []models.Transaction
-		// 日付の降順（新しいものが上）で全件取得
 		database.DB.Order("date desc").Find(&transactions)
 
 		// --- 棒グラフ用のデータ集計 (過去12ヶ月) ---
@@ -63,7 +64,7 @@ func main() {
 			Total    int
 		}
 		var monthlyExpenses []MonthlyExpense
-		now := time.Now().UTC() // タイムゾーン問題を避けるため、現在時刻をUTCで統一
+		now := time.Now().UTC()
 		twelveMonthsAgo := now.AddDate(0, -11, 0)
 		firstDayOfPeriod := time.Date(twelveMonthsAgo.Year(), twelveMonthsAgo.Month(), 1, 0, 0, 0, 0, time.UTC)
 
@@ -114,7 +115,8 @@ func main() {
 		}
 
 		c.HTML(http.StatusOK, "list.html", gin.H{
-			"transactions":     transactions,
+			"transactions": transactions,
+			// データを安全にJavaScriptオブジェクトとしてテンプレートに渡す
 			"barChartDataJSON": template.JS(barChartDataBytes),
 		})
 	})
